@@ -1,0 +1,54 @@
+name: Build & Release ARM64
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android NDK
+        run: |
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;21.0.6113669" > /dev/null
+
+      - name: Build APK
+        run: |
+          ./gradlew --no-daemon :smarttubetv:assembleStmobileRelease
+
+      - name: Filter APK Khusus ARM64
+        run: |
+          mkdir -p dist
+          # Mencari file APK arm64-v8a lalu menyalinnya dengan nama NewTube-ARM64.apk
+          find smarttubetv/build/outputs -type f -name "*arm64-v8a*.apk" -exec cp {} dist/NewTube-ARM64.apk \;
+          ls -lh dist/
+
+      - name: Publish ke GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Gunakan tag rilis jika ada, jika dispatch manual gunakan tanggal
+          TAG_NAME="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            TAG_NAME="release-$(date +'%Y%m%d-%H%M')"
+          fi
+
+          # Buat rilis dan unggah APK secara otomatis
+          gh release create "$TAG_NAME" dist/* \
+            --title "NewTube ARM64 ($TAG_NAME)" \
+            --generate-notes
